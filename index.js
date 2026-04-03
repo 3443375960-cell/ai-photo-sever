@@ -16,7 +16,7 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // 3. Google Gemini API Key（替换为你自己的！）
-const GEMINI_API_KEY = "YOUR_GOOGLE_AI_STUDIO_API_KEY";
+const GEMINI_API_KEY = "AIzaSyBDMH_z8bPYwODJ9GfPgYfscBnAMKeXm1g";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // 4. API转发接口（补充完整错误处理）
