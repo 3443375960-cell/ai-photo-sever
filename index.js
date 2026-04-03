@@ -1,55 +1,67 @@
 const express = require('express');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const axios = require('axios');
-const cors = require('cors');
 const app = express();
+app.use(express.json({limit: '50mb'}));
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+// 配置API Key（Google AI Studio）
+const GEMINI_API_KEY = "你的Google AI Studio API Key";
+const BANANA_API_KEY = "你的Banana API Key";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = `https://generativanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+// Gemini初始化
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-vision" });
 
-app.post('/api/edit', async (req, res) => {
+// AI处理接口
+app.post('/api/process', async (req, res) => {
   try {
-    const { image, beauty, white, face, body } = req.body;
-    const prompt = `
-请专业修图：
-美颜强度${beauty}%，美白强度${white}%，瘦脸强度${face}%，瘦身强度${body}%
-画质高清、不损伤、自然真实，只返回图片，不要文字。
-`;
-    const response = await axios.post(GEMINI_URL, {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: "image/jpeg", data: image } }
-        ]
-      }]
-    });
-    const result = response.data.candidates[0].content.parts[0].inline_data.data;
-    res.json({ result });
-  } catch (err) {
-    res.status(500).json({ error: "处理失败" });
-  }
-});
+    const { func, prompt, image, rect, opacity } = req.body;
+    let resultImage = '';
 
-app.post('/api/remove', async (req, res) => {
-  try {
-    const { image } = req.body;
-    const prompt = "去除杂物瑕疵，无痕修复，高清画质，只返回图片，不要文字";
-    const response = await axios.post(GEMINI_URL, {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: "image/jpeg", data: image } }
-        ]
-      }]
-    });
-    const result = response.data.candidates[0].content.parts[0].inline_data.data;
-    res.json({ result });
-  } catch (err) {
-    res.status(500).json({ error: "去除失败" });
+    switch(func) {
+      // 物体移除（Gemini）
+      case 'remove':
+        const removeRes = await model.generateContent([
+          prompt || "移除框选区域物体，保持背景自然融合",
+          { inlineData: { data: image.split(',')[1], mimeType: "image/png" } }
+        ]);
+        resultImage = removeRes.response.text();
+        break;
+
+      // AI一键美颜（Gemini）
+      case 'autoBeauty':
+        const beautyRes = await model.generateContent([
+          `自然美颜，保留五官妆容，透明度${opacity}%，优化皮肤、法令纹、光影`,
+          { inlineData: { data: image.split(',')[1], mimeType: "image/png" } }
+        ]);
+        resultImage = beautyRes.response.text();
+        break;
+
+      // 补发缝（Gemini）
+      case 'hair':
+        const hairRes = await model.generateContent([
+          "修复涂抹区域的发缝，自然衔接头发",
+          { inlineData: { data: image.split(',')[1], mimeType: "image/png" } }
+        ]);
+        resultImage = hairRes.response.text();
+        break;
+
+      // Banana生成填充
+      case 'generate':
+        const bananaRes = await axios.post('https://api.banana.dev/run', {
+          apiKey: BANANA_API_KEY,
+          modelKey: "image-generation",
+          inputs: { image, prompt, mask: rect }
+        });
+        resultImage = bananaRes.data.output;
+        break;
+    }
+
+    res.json({ result: resultImage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("服务启动"));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
